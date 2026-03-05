@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8 Mart + Random Havai Fişəng + Admin Panel</title>
+<style>
+body { margin:0; padding:0; font-family: Arial; background: linear-gradient(135deg,#7b2ff7,#f107a3); display:flex; justify-content:center; align-items:flex-start; min-height:100vh;}
+.container { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding:20px; border-radius:20px; width:500px; color:white; margin-top:20px;}
+h1,h3{text-align:center;}
+input,textarea,button{width:90%;padding:8px;margin:5px 0;border-radius:10px;border:none;outline:none;font-size:14px;}
+button{border-radius:20px;background:#fff;color:#7b2ff7;font-weight:bold;cursor:pointer;}
+button:hover{background:#f0f0f0;}
+.notification-item{display:flex;justify-content:space-between;align-items:center;background:#4a0b6c;padding:5px;border-radius:5px;margin-bottom:5px;}
+.notification-item button{background:red;margin-left:5px;padding:2px 5px;border-radius:3px;font-size:12px;cursor:pointer;}
+#messagesContainer,#loginAttemptsContainer{max-height:200px;overflow-y:auto;margin-top:10px;}
+.firework-container{position:absolute;pointer-events:none;width:2px;height:2px;}
+.particle{position:absolute;width:4px;height:4px;border-radius:50%;opacity:1;}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>Eight Mart 💜</h1>
+
+<div id="userLoginSection">
+<input type="text" id="username" placeholder="Adınızı daxil edin"><br>
+<button onclick="userLogin()">Daxil ol</button>
+</div>
+
+<hr>
+
+<div id="adminLoginSection">
+<input type="password" id="adminPassword" placeholder="Şifrəni daxil edin"><br>
+<button onclick="adminLogin()">Admin Panel</button>
+</div>
+
+<div id="welcomeDiv" style="display:none;">
+<p id="specialMsg"></p>
+<input type="text" id="relationInput" placeholder="Yasinin nəyisiniz?"><br>
+<textarea id="userMessage" placeholder="Geri dönüş mesajınız"></textarea><br>
+<button onclick="sendMessage()">Göndər</button>
+</div>
+
+<!-- Admin Panel -->
+<div id="adminDiv" style="display:none;">
+    <h3>Mesajlar və Qohumluq
+    <button class="admin-clear-btn" onclick="clearAllMessages()">Hamısını sil</button>
+    </h3>
+    <div id="messagesContainer"></div>
+
+    <h3>Giriş Cəhdləri (Audit Log)
+    <button class="admin-clear-btn" onclick="clearAllLoginAttempts()">Hamısını sil</button>
+    </h3>
+    <div id="loginAttemptsContainer"></div>
+</div>
+
+
+<script>
+const specialMessages = {
+"yasin":"Salam Yasin! 🎉 Bugün sənə xüsusi gün olsun! 🎉",
+"aysun":"🌸Ömrümm günümm 8 mart qadınlar bayramın mübarək qadınımmm. həmişə qadınım olaraq qall. SƏNİ ÇOX SEVİRƏM 🌸",
+"elvin":"Elvin, uğurların bol olsun! ⭐",
+"ana":"Əziz Ana, 8 Martınız mübarək! 💜"
+};
+
+const ADMIN_PASSWORD="asdfgh";
+let username="";
+let privateMessages=JSON.parse(localStorage.getItem("privateMessages")||"[]");
+let loginAttempts=JSON.parse(localStorage.getItem("loginAttempts")||"[]");
+let fireworkInterval;
+
+// Sort by time descending
+function sortByTimeDesc(arr){ return arr.sort((a,b)=>new Date(b.time)-new Date(a.time)); }
+
+// Record login attempt
+function recordLoginAttempt(user,type,success){
+    const now = new Date();
+    const time = now.toISOString();
+    loginAttempts.push({user,type,success,time});
+    localStorage.setItem("loginAttempts",JSON.stringify(loginAttempts));
+    if(document.getElementById("adminDiv").style.display==="block") renderLoginAttempts();
+}
+
+// User login
+function userLogin(){
+    username = document.getElementById("username").value.trim();
+    if(!username){ alert("Adınızı daxil edin!"); recordLoginAttempt("unknown","user",false); return;}
+    const key=username.toLowerCase();
+    if(!(key in specialMessages)){ alert("Sənin üçün deyil!"); recordLoginAttempt(username,"user",false); return;}
+    document.getElementById("specialMsg").innerText = specialMessages[key];
+    document.getElementById("userLoginSection").style.display="none";
+    document.getElementById("adminLoginSection").style.display="none";
+    document.getElementById("welcomeDiv").style.display="block";
+    recordLoginAttempt(username,"user",true);
+    startContinuousFireworks();
+}
+
+// Admin login
+function adminLogin(){
+    const pass=document.getElementById("adminPassword").value.trim();
+    const adminUser="admin";
+    if(pass===ADMIN_PASSWORD){
+        document.getElementById("userLoginSection").style.display="none";
+        document.getElementById("adminLoginSection").style.display="none";
+        document.getElementById("welcomeDiv").style.display="none";
+        document.getElementById("adminDiv").style.display="block";
+        renderMessages();
+        renderLoginAttempts();
+        recordLoginAttempt(adminUser,"admin",true);
+    } else {
+        alert("Şifrə yalnışdır!"); recordLoginAttempt("admin","admin",false);
+    }
+}
+
+// Send message
+function sendMessage(){
+    const relation=document.getElementById("relationInput").value.trim();
+    const msg=document.getElementById("userMessage").value.trim();
+    if(!relation && !msg) return alert("Qohumluq və ya mesaj daxil edin!");
+    const now=new Date();
+    const time=now.toISOString();
+    const fullMessage = (relation?relation+" - ":"")+msg;
+    privateMessages.push({author:username,text:fullMessage,time});
+    localStorage.setItem("privateMessages",JSON.stringify(privateMessages));
+    document.getElementById("relationInput").value="";
+    document.getElementById("userMessage").value="";
+    alert("✉️ Mesajınız göndərildi! Yalnız Yasin görəcək. Təşəkkürlər🙃❤");
+}
+
+// Render messages
+function renderMessages(){
+    const container=document.getElementById("messagesContainer");
+    container.innerHTML="";
+    sortByTimeDesc(privateMessages).forEach((m,i)=>{
+        const div=document.createElement("div");
+        div.className="notification-item";
+        div.innerHTML=`<span><strong>${m.author}</strong>: ${m.text} (${new Date(m.time).toLocaleString()})</span>
+                       <span>
+                       <button onclick="editMessage(${i})">Redaktə</button>
+                       <button onclick="deleteMessage(${i})">Sil</button>
+                       </span>`;
+        container.appendChild(div);
+    });
+}
+
+// Render login attempts
+function renderLoginAttempts(){
+    const container=document.getElementById("loginAttemptsContainer");
+    container.innerHTML="";
+
+    // İstifadəçilər üzrə qruplaşdır
+    const attemptsByUser = {};
+    loginAttempts.forEach((a,index)=>{
+        const key = a.user + " ("+a.type+")";
+        if(!attemptsByUser[key]) attemptsByUser[key] = [];
+        attemptsByUser[key].push({...a,index}); // index əlavə etdik
+    });
+
+    // Array halına gətir və cəhd sayına görə azalan sırala
+    const sortedUsers = Object.keys(attemptsByUser).map(user=>{
+        const attempts = attemptsByUser[user];
+        const lastTime = new Date(attempts[attempts.length-1].time);
+        return {user, attempts, lastTime, count: attempts.length};
+    }).sort((a,b)=>b.count - a.count || b.lastTime - a.lastTime);
+
+    sortedUsers.forEach(u=>{
+        u.attempts.forEach(a=>{
+            const div = document.createElement("div");
+            div.className="notification-item";
+            div.innerHTML=`${new Date(a.time).toLocaleString()} → ${a.user} : ${a.success?"✅ Uğurlu":"❌ Uğursuz"}
+            <button onclick="deleteLoginAttempt(${a.index})">Sil</button>`;
+            container.appendChild(div);
+        });
+    });
+}
+
+// Giriş cəhdini silmək funksiyası
+function deleteLoginAttempt(index){
+    if(confirm("Bu giriş cəhdini silmək istəyirsiniz?")){
+        loginAttempts.splice(index,1);
+        localStorage.setItem("loginAttempts",JSON.stringify(loginAttempts));
+        renderLoginAttempts();
+    }
+}
+// Edit/Delete message
+function editMessage(i){
+    const newText=prompt("Mesajı redaktə edin:",privateMessages[i].text);
+    if(newText!==null && newText.trim()!==""){
+        privateMessages[i].text=newText.trim();
+        localStorage.setItem("privateMessages",JSON.stringify(privateMessages));
+        renderMessages();
+    }
+}
+function deleteMessage(i){
+    if(confirm("Mesajı silmək istəyirsiniz?")){
+        privateMessages.splice(i,1);
+        localStorage.setItem("privateMessages",JSON.stringify(privateMessages));
+        renderMessages();
+    }
+}
+// Mesajlar hissəsi: Hamısını sil
+function clearAllMessages(){
+    if(confirm("Bütün mesajları və qohumluqları silmək istəyirsiniz?")){
+        privateMessages = [];
+        localStorage.setItem("privateMessages", JSON.stringify(privateMessages));
+        renderMessages();
+    }
+}
+
+// Giriş cəhdləri hissəsi: Hamısını sil
+function clearAllLoginAttempts(){
+    if(confirm("Bütün giriş cəhdlərini silmək istəyirsiniz?")){
+        loginAttempts = [];
+        localStorage.setItem("loginAttempts", JSON.stringify(loginAttempts));
+        renderLoginAttempts();
+    }
+}
+
+// Random havai fişənglər bütün ekran üzrə
+function launchFirework(){
+    const container=document.createElement("div");
+    container.className="firework-container";
+    container.style.left=Math.random()*window.innerWidth+"px";
+    container.style.top=Math.random()*window.innerHeight+"px";
+    document.body.appendChild(container);
+
+    const particlesCount=15+Math.floor(Math.random()*10);
+    for(let i=0;i<particlesCount;i++){
+        const particle=document.createElement("div");
+        particle.className="particle";
+        particle.style.background=`hsl(${Math.random()*360},100%,50%)`;
+        container.appendChild(particle);
+
+        const angle=(Math.random()*Math.PI*2);
+        const distance=50+Math.random()*150;
+        particle.animate([
+            {transform:"translate(0,0)",opacity:1},
+            {transform:`translate(${Math.cos(angle)*distance}px,${Math.sin(angle)*distance}px)`,opacity:0}
+        ],{duration:1500+Math.random()*500,easing:"ease-out",fill:"forwards"});
+    }
+    setTimeout(()=>container.remove(),2000);
+}
+function startContinuousFireworks(){
+    if(fireworkInterval) clearInterval(fireworkInterval);
+    fireworkInterval=setInterval(launchFirework,500);
+}
+</script>
+</body>
+</html>
